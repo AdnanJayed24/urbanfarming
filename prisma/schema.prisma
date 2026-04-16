@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  VENDOR
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+}
+
+enum CertificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ProduceCategory {
+  SEEDS
+  TOOLS
+  ORGANIC_PRODUCE
+  COMPOST
+  OTHER
+}
+
+enum RentalAvailability {
+  AVAILABLE
+  BOOKED
+  INACTIVE
+}
+
+enum BookingStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
+enum PlantStatus {
+  PLANTED
+  GERMINATING
+  GROWING
+  HARVEST_READY
+  HARVESTED
+}
+
+enum PlantHealthStatus {
+  EXCELLENT
+  GOOD
+  NEEDS_ATTENTION
+  CRITICAL
+}
+
+model User {
+  id             String          @id @default(cuid())
+  name           String
+  email          String          @unique
+  password       String
+  role           Role
+  status         UserStatus      @default(ACTIVE)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  vendorProfile  VendorProfile?
+  customerOrders Order[]         @relation("CustomerOrders")
+  communityPosts CommunityPost[]
+  plantRecords   PlantRecord[]
+  rentalBookings RentalBooking[] @relation("CustomerBookings")
+
+  @@index([role, status])
+}
+
+model VendorProfile {
+  id                  String                @id @default(cuid())
+  userId              String                @unique
+  farmName            String
+  certificationStatus CertificationStatus   @default(PENDING)
+  farmLocation        String
+  approvalNotes       String?
+  isApproved          Boolean               @default(false)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  produce             Produce[]
+  rentalSpaces        RentalSpace[]
+  certifications      SustainabilityCert[]
+  vendorOrders        Order[]               @relation("VendorOrders")
+
+  @@index([farmLocation])
+  @@index([isApproved, certificationStatus])
+}
+
+model Produce {
+  id                  String              @id @default(cuid())
+  vendorId            String
+  name                String
+  description         String
+  price               Decimal             @db.Decimal(10, 2)
+  category            ProduceCategory
+  certificationStatus CertificationStatus @default(PENDING)
+  availableQuantity   Int
+  isApproved          Boolean             @default(false)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  vendor              VendorProfile       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  orders              Order[]
+
+  @@index([category, isApproved])
+  @@index([vendorId, certificationStatus])
+}
+
+model RentalSpace {
+  id           String             @id @default(cuid())
+  vendorId     String
+  location     String
+  size         String
+  price        Decimal            @db.Decimal(10, 2)
+  availability RentalAvailability @default(AVAILABLE)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  vendor       VendorProfile      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  bookings     RentalBooking[]
+
+  @@index([location, availability])
+}
+
+model RentalBooking {
+  id            String        @id @default(cuid())
+  rentalSpaceId String
+  userId        String
+  startDate     DateTime
+  endDate       DateTime?
+  status        BookingStatus @default(ACTIVE)
+  bookedAt      DateTime      @default(now())
+  rentalSpace   RentalSpace   @relation(fields: [rentalSpaceId], references: [id], onDelete: Cascade)
+  user          User          @relation("CustomerBookings", fields: [userId], references: [id], onDelete: Cascade)
+  plantRecords  PlantRecord[]
+
+  @@index([userId, status])
+  @@index([rentalSpaceId, status])
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  userId     String
+  produceId  String
+  vendorId   String
+  quantity   Int         @default(1)
+  totalAmount Decimal    @db.Decimal(10, 2)
+  status     OrderStatus @default(PENDING)
+  orderDate  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  customer   User        @relation("CustomerOrders", fields: [userId], references: [id], onDelete: Cascade)
+  produce    Produce     @relation(fields: [produceId], references: [id], onDelete: Restrict)
+  vendor     VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id], onDelete: Restrict)
+
+  @@index([userId, orderDate])
+  @@index([vendorId, status])
+}
+
+model CommunityPost {
+  id          String   @id @default(cuid())
+  userId      String
+  postContent String
+  postDate    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postDate])
+  @@index([userId])
+}
+
+model SustainabilityCert {
+  id                  String              @id @default(cuid())
+  vendorId            String
+  certifyingAgency    String
+  certificationDate   DateTime
+  certificationStatus CertificationStatus @default(PENDING)
+  certificateUrl      String?
+  notes               String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  vendor              VendorProfile       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId, certificationStatus])
+}
+
+model PlantRecord {
+  id                String            @id @default(cuid())
+  userId            String
+  rentalBookingId   String?
+  plantName         String
+  growthStage       String
+  status            PlantStatus       @default(PLANTED)
+  healthStatus      PlantHealthStatus @default(GOOD)
+  expectedHarvestAt DateTime?
+  notes             String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rentalBooking     RentalBooking?    @relation(fields: [rentalBookingId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+}
